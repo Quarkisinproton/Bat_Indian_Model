@@ -190,16 +190,25 @@ def train_model(args):
     
     # Evaluate on test set
     print("\nEvaluating on test set...")
-    test_loss, test_acc, test_precision, test_recall, test_auc = classifier.model.evaluate(
-        X_test, y_test, verbose=0
-    )
+    test_results = classifier.model.evaluate(X_test, y_test, verbose=0)
+    
+    # Extract results (first is loss, rest are metrics)
+    test_loss = test_results[0]
+    test_acc = test_results[1] if len(test_results) > 1 else 0.0
+    test_precision = test_results[2] if len(test_results) > 2 else 0.0
+    test_recall = test_results[3] if len(test_results) > 3 else 0.0
+    test_auc = test_results[4] if len(test_results) > 4 else 0.0
     
     print(f"\nTest Results:")
     print(f"  Loss: {test_loss:.4f}")
-    print(f"  Accuracy: {test_acc:.4f}")
-    print(f"  Precision: {test_precision:.4f}")
-    print(f"  Recall: {test_recall:.4f}")
-    print(f"  AUC: {test_auc:.4f}")
+    if len(test_results) > 1:
+        print(f"  Accuracy: {test_acc:.4f}")
+    if len(test_results) > 2:
+        print(f"  Precision: {test_precision:.4f}")
+    if len(test_results) > 3:
+        print(f"  Recall: {test_recall:.4f}")
+    if len(test_results) > 4:
+        print(f"  AUC: {test_auc:.4f}")
     
     # Save final model
     os.makedirs(args.output_dir, exist_ok=True)
