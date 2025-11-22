@@ -32,12 +32,5 @@ setup(
     ],
     python_requires=">=3.7",
     install_requires=requirements,
-    entry_points={
-        'console_scripts': [
-            'bat-train=train:main',
-            'bat-predict=predict:main',
-            'bat-preprocess=preprocess_data:main',
-            'bat-evaluate=evaluate:main',
-        ],
-    },
+
 )
