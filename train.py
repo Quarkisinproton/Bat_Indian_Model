@@ -136,8 +136,9 @@ def train_model(args):
     
     # Load data
     print("\nLoading data...")
-    img_size = tuple(args.img_size) + (3,)  # Add channel dimension
-    data_loader = BatDataLoader(args.data_dir, img_size=tuple(args.img_size))
+    img_size_2d = tuple(args.img_size)  # 2D size for data loader
+    img_size = img_size_2d + (3,)  # 3D size with channel dimension for model
+    data_loader = BatDataLoader(args.data_dir, img_size=img_size_2d)
     
     X_train, X_val, X_test, y_train, y_val, y_test = data_loader.prepare_data(
         test_size=args.test_size,

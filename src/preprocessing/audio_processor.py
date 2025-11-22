@@ -129,8 +129,11 @@ class AudioProcessor:
         spec_max = spectrogram.max()
         
         # Handle constant spectrograms to avoid division by zero
-        if spec_max == spec_min:
-            spec_norm = np.zeros_like(spectrogram)
+        # Use a small epsilon for numerical stability
+        epsilon = 1e-8
+        if spec_max - spec_min < epsilon:
+            # For constant spectrograms, map to middle gray value
+            spec_norm = np.full_like(spectrogram, 0.5)
         else:
             spec_norm = (spectrogram - spec_min) / (spec_max - spec_min)
         
