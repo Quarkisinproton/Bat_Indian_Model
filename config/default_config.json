@@ -1,0 +1,35 @@
+{
+  "model": {
+    "type": "cnn",
+    "input_shape": [128, 128, 3],
+    "num_classes": 10,
+    "use_pretrained": false
+  },
+  "training": {
+    "epochs": 50,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "optimizer": "adam",
+    "augment": true
+  },
+  "data": {
+    "img_size": [128, 128],
+    "test_size": 0.2,
+    "val_size": 0.1,
+    "random_seed": 42
+  },
+  "audio_processing": {
+    "sample_rate": 44100,
+    "n_mels": 128,
+    "n_fft": 2048,
+    "hop_length": 512,
+    "duration": 5.0
+  },
+  "paths": {
+    "raw_data": "data/raw",
+    "processed_data": "data/processed",
+    "models": "models",
+    "checkpoints": "checkpoints",
+    "logs": "logs"
+  }
+}
