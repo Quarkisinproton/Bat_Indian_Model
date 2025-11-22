@@ -94,17 +94,24 @@ class BatDataLoader:
         y_encoded = self.label_encoder.fit_transform(y)
         y_categorical = to_categorical(y_encoded)
         
-        # Split into train+val and test
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y_categorical, test_size=test_size, random_state=random_state, stratify=y_encoded
+        # Split into train+val and test using encoded labels for stratification
+        X_temp, X_test, y_temp_encoded, y_test_encoded = train_test_split(
+            X, y_encoded, test_size=test_size, random_state=random_state, stratify=y_encoded
         )
+        
+        # Convert to categorical after split
+        y_temp = to_categorical(y_temp_encoded)
+        y_test = to_categorical(y_test_encoded)
         
         # Split train into train and validation
         val_ratio = val_size / (1 - test_size)
-        y_temp_labels = np.argmax(y_temp, axis=1)
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_temp, y_temp, test_size=val_ratio, random_state=random_state, stratify=y_temp_labels
+        X_train, X_val, y_train_encoded, y_val_encoded = train_test_split(
+            X_temp, y_temp_encoded, test_size=val_ratio, random_state=random_state, stratify=y_temp_encoded
         )
+        
+        # Convert to categorical
+        y_train = to_categorical(y_train_encoded)
+        y_val = to_categorical(y_val_encoded)
         
         print(f"Training samples: {len(X_train)}")
         print(f"Validation samples: {len(X_val)}")

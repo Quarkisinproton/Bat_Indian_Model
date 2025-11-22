@@ -125,7 +125,15 @@ class AudioProcessor:
             np.array: RGB image array
         """
         # Normalize to 0-255 range
-        spec_norm = (spectrogram - spectrogram.min()) / (spectrogram.max() - spectrogram.min())
+        spec_min = spectrogram.min()
+        spec_max = spectrogram.max()
+        
+        # Handle constant spectrograms to avoid division by zero
+        if spec_max == spec_min:
+            spec_norm = np.zeros_like(spectrogram)
+        else:
+            spec_norm = (spectrogram - spec_min) / (spec_max - spec_min)
+        
         spec_norm = (spec_norm * 255).astype(np.uint8)
         
         # Convert to PIL Image and resize
