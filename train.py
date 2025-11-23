@@ -19,8 +19,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train Bat Species Classification Model')
     
     # Data parameters
-    parser.add_argument('--data_dir', type=str, default='data/processed',
-                       help='Directory containing processed spectrogram data')
+    parser.add_argument('--data_dir', type=str, default='data/sample',
+                       help='Directory containing processed spectrogram data (defaults to data/sample)')
     parser.add_argument('--img_size', type=int, nargs=2, default=[128, 128],
                        help='Image size (height width)')
     
@@ -129,6 +129,16 @@ def train_model(args):
     # Set random seeds for reproducibility
     np.random.seed(args.random_seed)
     tf.random.set_seed(args.random_seed)
+    # Configure TensorFlow to allow GPU memory growth when running on Colab
+    # This helps avoid TF pre-allocating all GPU memory and reduces OOM issues
+    try:
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            print(f"Enabled memory growth for {len(gpus)} GPU(s)")
+    except Exception as e:
+        print(f"Could not set TensorFlow GPU memory growth: {e}")
     
     print("=" * 50)
     print("Bat Species Classification - Training")
