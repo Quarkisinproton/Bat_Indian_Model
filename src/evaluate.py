@@ -3,9 +3,19 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from dataset import BatDataset
-from models import BatCNN, BatTransformer
+from pathlib import Path
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
+import sys
+import importlib.util
+
+# Workaround: Import BatCNN, BatTransformer from models.py (not models/ package)
+# This avoids conflict when both models.py and models/ folder exist
+spec = importlib.util.spec_from_file_location("models_pytorch", Path(__file__).parent / "models.py")
+models_pytorch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(models_pytorch)
+BatCNN = models_pytorch.BatCNN
+BatTransformer = models_pytorch.BatTransformer
 
 def evaluate(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
