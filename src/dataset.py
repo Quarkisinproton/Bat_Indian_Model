@@ -2,11 +2,13 @@ import os
 import json
 import torch
 import torchaudio
+import torchaudio.functional as F
 from torch.utils.data import Dataset
 from pathlib import Path
+import numpy as np
 
 class BatDataset(Dataset):
-    def __init__(self, annotations_file, data_dir, target_sample_rate=384000, n_mels=128, fixed_duration=None):
+    def __init__(self, annotations_file, data_dir, target_sample_rate=384000, n_mels=128, fixed_duration=None, augment=False):
         """
         Args:
             annotations_file (str): Path to the JSON annotations file.
@@ -14,11 +16,13 @@ class BatDataset(Dataset):
             target_sample_rate (int): Sample rate to resample audio to.
             n_mels (int): Number of mel filterbanks.
             fixed_duration (float): If set, pad/crop audio to this duration (in seconds).
+            augment (bool): If True, apply on-the-fly data augmentation (pitch shift, time stretch, noise).
         """
         self.data_dir = Path(data_dir)
         self.target_sample_rate = target_sample_rate
         self.n_mels = n_mels
         self.fixed_duration = fixed_duration
+        self.augment = augment
         
         with open(annotations_file, 'r') as f:
             self.annotations = json.load(f)
@@ -117,6 +121,46 @@ class BatDataset(Dataset):
                 
         return samples
 
+    def _apply_augmentation(self, waveform):
+        """
+        Apply random augmentations to waveform:
+        - Pitch shift: ±2 semitones
+        - Time stretch: 0.9x to 1.1x speed
+        - Add noise: small Gaussian noise
+        - Volume change: ±20% volume
+        """
+        if not self.augment:
+            return waveform
+        
+        # Randomly choose 1-3 augmentations
+        num_augmentations = np.random.randint(1, 4)
+        augmentations = np.random.choice(['pitch', 'stretch', 'noise', 'volume'], 
+                                        size=num_augmentations, replace=False)
+        
+        for aug in augmentations:
+            if aug == 'pitch' and np.random.rand() > 0.5:
+                # Random pitch shift: -2 to +2 semitones
+                n_steps = np.random.randint(-2, 3)
+                waveform = F.pitch_shift(waveform, self.target_sample_rate, n_steps)
+            
+            elif aug == 'stretch' and np.random.rand() > 0.5:
+                # Random time stretch: 0.9x to 1.1x
+                rate = np.random.uniform(0.9, 1.1)
+                waveform = F.speed(waveform, rate)
+            
+            elif aug == 'noise' and np.random.rand() > 0.5:
+                # Add Gaussian noise
+                noise_level = np.random.uniform(0.001, 0.01)
+                noise = torch.randn_like(waveform) * noise_level
+                waveform = waveform + noise
+            
+            elif aug == 'volume' and np.random.rand() > 0.5:
+                # Random volume change: 0.8x to 1.2x
+                volume_scale = np.random.uniform(0.8, 1.2)
+                waveform = waveform * volume_scale
+        
+        return waveform
+
     def _find_file(self, filename):
         # Search in data_dir recursively
         for path in self.data_dir.rglob(filename):
@@ -134,6 +178,9 @@ class BatDataset(Dataset):
         if sample_rate != self.target_sample_rate:
             resampler = torchaudio.transforms.Resample(sample_rate, self.target_sample_rate)
             waveform = resampler(waveform)
+        
+        # Apply augmentation (on-the-fly, in memory)
+        waveform = self._apply_augmentation(waveform)
             
         # Handle duration (pad or crop)
         if self.fixed_duration:
