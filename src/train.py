@@ -4,9 +4,18 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from dataset import BatDataset
-from models import BatCNN, BatTransformer
 from pathlib import Path
 import numpy as np
+import sys
+import importlib.util
+
+# Workaround: Import BatCNN, BatTransformer from models.py (not models/ package)
+# This avoids conflict when both models.py and models/ folder exist
+spec = importlib.util.spec_from_file_location("models_pytorch", Path(__file__).parent / "models.py")
+models_pytorch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(models_pytorch)
+BatCNN = models_pytorch.BatCNN
+BatTransformer = models_pytorch.BatTransformer
 
 def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
