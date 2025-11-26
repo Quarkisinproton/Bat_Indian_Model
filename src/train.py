@@ -81,7 +81,6 @@ def train(args):
             
         train_loss /= len(train_loader)
         train_species_acc /= len(train_dataset)
-        train_count_mae /= len(train_dataset)
         
         # Validation
         model.eval()
