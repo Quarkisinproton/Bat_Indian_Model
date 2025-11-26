@@ -38,6 +38,13 @@ def train(args):
     
     print(f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}")
     
+    # Calculate class weights for imbalanced data
+    train_species_ids = [dataset.samples[i]['species_id'] for i in train_dataset.indices]
+    class_counts = np.bincount(train_species_ids, minlength=2)
+    class_weights = len(train_species_ids) / (2 * class_counts)
+    class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
+    print(f"Class counts: {class_counts}, Class weights: {class_weights.cpu().numpy()}")
+    
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
     
@@ -49,8 +56,8 @@ def train(args):
     else:
         raise ValueError(f"Unknown model: {args.model}")
         
-    # Loss and Optimizer
-    criterion_species = nn.CrossEntropyLoss()
+    # Loss and Optimizer - use weighted loss for class imbalance
+    criterion_species = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # Training Loop

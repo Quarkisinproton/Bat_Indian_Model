@@ -123,21 +123,20 @@ class BatDataset(Dataset):
 
     def _apply_augmentation(self, waveform):
         """
-        Apply multiple lightweight random augmentations to waveform (memory-efficient):
+        Apply multiple random augmentations to waveform (AGGRESSIVE for small dataset):
         - Add Gaussian noise: realistic sensor noise
         - Add background noise: simulate ambient sounds
-        - Volume/amplitude scaling: 0.7x to 1.3x (more aggressive)
+        - Volume/amplitude scaling: 0.6x to 1.4x (very aggressive)
         - Clipping distortion: frequency content variation
         - Bit depth reduction: simulate lower quality recordings
         
-        All operations are element-wise or simple operations - no expensive
-        resampling or FFT-based pitch shifting that causes OOM.
+        Apply 3-5 augmentations per sample to maximize data diversity.
         """
         if not self.augment:
             return waveform
         
-        # Randomly apply 2-4 augmentations per sample
-        num_augmentations = np.random.randint(2, 5)
+        # Apply 3-5 augmentations per sample (increased from 2-4)
+        num_augmentations = np.random.randint(3, 6)
         augmentations = np.random.choice(
             ['gaussian_noise', 'pink_noise', 'volume', 'clipping', 'quantize'],
             size=min(num_augmentations, 5),
@@ -161,8 +160,8 @@ class BatDataset(Dataset):
                 waveform = waveform + pink_noise * noise_level
             
             elif aug == 'volume':
-                # Aggressive volume scaling: 0.7x to 1.3x
-                volume_scale = np.random.uniform(0.7, 1.3)
+                # Very aggressive volume scaling: 0.6x to 1.4x
+                volume_scale = np.random.uniform(0.6, 1.4)
                 waveform = waveform * volume_scale
             
             elif aug == 'clipping':
