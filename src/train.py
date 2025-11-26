@@ -62,6 +62,9 @@ def train(args):
     
     # Training Loop
     best_val_loss = float('inf')
+    best_val_acc = 0.0
+    patience = 20  # Early stopping: stop if no improvement for 20 epochs
+    epochs_without_improvement = 0
     
     for epoch in range(args.epochs):
         model.train()
@@ -114,10 +117,20 @@ def train(args):
               f"Train Loss: {train_loss:.4f} Acc: {train_species_acc:.2f} | "
               f"Val Loss: {val_loss:.4f} Acc: {val_species_acc:.2f}")
         
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # Save model based on validation ACCURACY (more stable than loss for small datasets)
+        if val_species_acc > best_val_acc:
+            best_val_acc = val_species_acc
             torch.save(model.state_dict(), f"best_model_{args.model}.pth")
-            print("Saved best model")
+            print(f"Saved best model (Val Acc: {val_species_acc:.2f})")
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+        
+        # Early stopping: prevent overfitting
+        if epochs_without_improvement >= patience:
+            print(f"\nEarly stopping: No improvement for {patience} epochs")
+            print(f"Best validation accuracy: {best_val_acc:.2f}")
+            break
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Bat Species Model")
@@ -126,13 +139,12 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="cnn", choices=["cnn", "transformer"], help="Model architecture")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate (reduced to prevent overfitting)")
     parser.add_argument("--sample_rate", type=int, default=44100, help="Target sample rate")
     parser.add_argument("--n_mels", type=int, default=128, help="Number of mel bins")
     parser.add_argument("--duration", type=float, default=3.5, help="Fixed duration in seconds")
     parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio")
-    parser.add_argument("--count_weight", type=float, default=1.0, help="Weight for count loss")
-    parser.add_argument("--augment", type=bool, default=False, help="Enable data augmentation (pitch, stretch, noise, volume)")
+    parser.add_argument("--augment", type=bool, default=False, help="Enable data augmentation")
     
     args = parser.parse_args()
     train(args)
