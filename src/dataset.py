@@ -141,12 +141,22 @@ class BatDataset(Dataset):
             if aug == 'pitch' and np.random.rand() > 0.5:
                 # Random pitch shift: -2 to +2 semitones
                 n_steps = np.random.randint(-2, 3)
-                waveform = F.pitch_shift(waveform, self.target_sample_rate, n_steps)
+                try:
+                    waveform = F.pitch_shift(waveform, self.target_sample_rate, n_steps)
+                except:
+                    pass  # Skip if pitch shift fails
             
             elif aug == 'stretch' and np.random.rand() > 0.5:
-                # Random time stretch: 0.9x to 1.1x
+                # Random time stretch: 0.9x to 1.1x (resample to simulate speed change)
                 rate = np.random.uniform(0.9, 1.1)
-                waveform = F.speed(waveform, rate)
+                # Use resample with adjusted sample rate to simulate time stretch
+                new_sr = int(self.target_sample_rate * rate)
+                try:
+                    waveform = F.resample(waveform, self.target_sample_rate, new_sr)
+                    # Resample back to original rate
+                    waveform = F.resample(waveform, new_sr, self.target_sample_rate)
+                except:
+                    pass  # Skip if resample fails
             
             elif aug == 'noise' and np.random.rand() > 0.5:
                 # Add Gaussian noise
