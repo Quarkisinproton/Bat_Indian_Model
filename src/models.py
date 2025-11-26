@@ -6,7 +6,12 @@ class BatCNN(nn.Module):
     def __init__(self, n_mels=128, n_classes=2):
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.MaxPool2d(2),
@@ -16,25 +21,16 @@ class BatCNN(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(2),
             
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
             nn.AdaptiveAvgPool2d((4, 4))
         )
         
         self.flatten = nn.Flatten()
-        self.fc_shared = nn.Linear(256 * 4 * 4, 512)
+        self.fc_shared = nn.Linear(64 * 4 * 4, 128)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.3)
         
-        # Heads
-        self.species_head = nn.Linear(512, n_classes)
-        self.count_head = nn.Linear(512, 1)
+        # Single head: only species classification (drop count prediction)
+        self.species_head = nn.Linear(128, n_classes)
 
     def forward(self, x):
         # x: (Batch, 1, n_mels, time)
@@ -44,9 +40,8 @@ class BatCNN(nn.Module):
         x = self.dropout(x)
         
         species_logits = self.species_head(x)
-        count_pred = self.count_head(x) # Linear activation for regression
         
-        return species_logits, count_pred
+        return species_logits
 
 class BatTransformer(nn.Module):
     def __init__(self, n_mels=128, max_len=1000, n_classes=2, d_model=256, nhead=4, num_layers=4, patch_size=16):

@@ -123,49 +123,27 @@ class BatDataset(Dataset):
 
     def _apply_augmentation(self, waveform):
         """
-        Apply random augmentations to waveform:
-        - Pitch shift: ±2 semitones
-        - Time stretch: 0.9x to 1.1x speed
+        Apply lightweight random augmentations to waveform (memory-efficient):
         - Add noise: small Gaussian noise
-        - Volume change: ±20% volume
+        - Volume change: ±10% volume
+        
+        Note: Expensive augmentations (pitch shift, time stretch) are skipped
+        to avoid OOM errors on limited GPU memory.
         """
         if not self.augment:
             return waveform
         
-        # Randomly choose 1-3 augmentations
-        num_augmentations = np.random.randint(1, 4)
-        augmentations = np.random.choice(['pitch', 'stretch', 'noise', 'volume'], 
-                                        size=num_augmentations, replace=False)
+        # Only apply lightweight augmentations (no pitch shift or resample)
+        if np.random.rand() > 0.5:
+            # Add Gaussian noise
+            noise_level = np.random.uniform(0.0005, 0.005)
+            noise = torch.randn_like(waveform) * noise_level
+            waveform = waveform + noise
         
-        for aug in augmentations:
-            if aug == 'pitch' and np.random.rand() > 0.5:
-                # Random pitch shift: -2 to +2 semitones
-                n_steps = np.random.randint(-2, 3)
-                try:
-                    waveform = F.pitch_shift(waveform, self.target_sample_rate, n_steps)
-                except:
-                    pass  # Skip if pitch shift fails
-            
-            elif aug == 'stretch' and np.random.rand() > 0.5:
-                # Random time stretch: 0.95x to 1.05x (reduce range to avoid memory issues)
-                rate = np.random.uniform(0.95, 1.05)
-                new_sr = int(self.target_sample_rate * rate)
-                try:
-                    waveform_resampled = F.resample(waveform, self.target_sample_rate, new_sr)
-                    waveform = F.resample(waveform_resampled, new_sr, self.target_sample_rate)
-                except Exception as e:
-                    pass  # Skip if resample fails
-            
-            elif aug == 'noise' and np.random.rand() > 0.5:
-                # Add Gaussian noise
-                noise_level = np.random.uniform(0.001, 0.01)
-                noise = torch.randn_like(waveform) * noise_level
-                waveform = waveform + noise
-            
-            elif aug == 'volume' and np.random.rand() > 0.5:
-                # Random volume change: 0.8x to 1.2x
-                volume_scale = np.random.uniform(0.8, 1.2)
-                waveform = waveform * volume_scale
+        if np.random.rand() > 0.5:
+            # Random volume change: 0.9x to 1.1x (reduced from 0.8-1.2)
+            volume_scale = np.random.uniform(0.9, 1.1)
+            waveform = waveform * volume_scale
         
         return waveform
 

@@ -51,7 +51,6 @@ def train(args):
         
     # Loss and Optimizer
     criterion_species = nn.CrossEntropyLoss()
-    criterion_count = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # Training Loop
@@ -61,21 +60,16 @@ def train(args):
         model.train()
         train_loss = 0.0
         train_species_acc = 0.0
-        train_count_mae = 0.0
         
         for batch in train_loader:
             spectrogram = batch['spectrogram'].to(device)
             species_label = batch['species_label'].to(device)
-            call_count = batch['call_count'].to(device).float().unsqueeze(1)
             
             optimizer.zero_grad()
             
-            species_logits, count_pred = model(spectrogram)
+            species_logits = model(spectrogram)
             
-            loss_s = criterion_species(species_logits, species_label)
-            loss_c = criterion_count(count_pred, call_count)
-            
-            loss = loss_s + args.count_weight * loss_c
+            loss = criterion_species(species_logits, species_label)
             loss.backward()
             optimizer.step()
             
@@ -84,7 +78,6 @@ def train(args):
             # Metrics
             preds = torch.argmax(species_logits, dim=1)
             train_species_acc += (preds == species_label).sum().item()
-            train_count_mae += torch.abs(count_pred - call_count).sum().item()
             
         train_loss /= len(train_loader)
         train_species_acc /= len(train_dataset)
@@ -94,33 +87,26 @@ def train(args):
         model.eval()
         val_loss = 0.0
         val_species_acc = 0.0
-        val_count_mae = 0.0
         
         with torch.no_grad():
             for batch in val_loader:
                 spectrogram = batch['spectrogram'].to(device)
                 species_label = batch['species_label'].to(device)
-                call_count = batch['call_count'].to(device).float().unsqueeze(1)
                 
-                species_logits, count_pred = model(spectrogram)
+                species_logits = model(spectrogram)
                 
-                loss_s = criterion_species(species_logits, species_label)
-                loss_c = criterion_count(count_pred, call_count)
-                
-                loss = loss_s + args.count_weight * loss_c
+                loss = criterion_species(species_logits, species_label)
                 val_loss += loss.item()
                 
                 preds = torch.argmax(species_logits, dim=1)
                 val_species_acc += (preds == species_label).sum().item()
-                val_count_mae += torch.abs(count_pred - call_count).sum().item()
                 
         val_loss /= len(val_loader)
         val_species_acc /= len(val_dataset)
-        val_count_mae /= len(val_dataset)
         
         print(f"Epoch {epoch+1}/{args.epochs} | "
-              f"Train Loss: {train_loss:.4f} Acc: {train_species_acc:.2f} MAE: {train_count_mae:.2f} | "
-              f"Val Loss: {val_loss:.4f} Acc: {val_species_acc:.2f} MAE: {val_count_mae:.2f}")
+              f"Train Loss: {train_loss:.4f} Acc: {train_species_acc:.2f} | "
+              f"Val Loss: {val_loss:.4f} Acc: {val_species_acc:.2f}")
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
