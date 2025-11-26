@@ -1,182 +1,84 @@
 """
-Inference script for Bat Species Classification
+PyTorch Inference Script for Bat Species Classification
 """
 
-import argparse
-import os
-import json
+import torch
+import torch.nn as nn
+import librosa
 import numpy as np
-from PIL import Image
-from tensorflow import keras
+import argparse
+from pathlib import Path
+import importlib.util
+import sys
 
-from src.preprocessing.audio_processor import AudioProcessor
-from src.utils.data_loader import BatDataLoader
-
-
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Predict bat species from audio or spectrogram')
+def load_model(model_path, model_type='cnn', n_mels=128, device='cuda'):
+    """Load trained PyTorch model"""
+    # Import models using importlib workaround
+    spec = importlib.util.spec_from_file_location("models_pytorch", Path(__file__).parent / "src" / "models.py")
+    models_pytorch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(models_pytorch)
     
-    parser.add_argument('--input', type=str, required=True,
-                       help='Path to input file (audio or spectrogram image)')
-    parser.add_argument('--model', type=str, required=True,
-                       help='Path to trained model file (.h5)')
-    parser.add_argument('--labels', type=str, required=True,
-                       help='Path to labels file (.json)')
-    parser.add_argument('--input_type', type=str, default='auto',
-                       choices=['auto', 'audio', 'image'],
-                       help='Type of input file')
-    parser.add_argument('--img_size', type=int, nargs=2, default=[128, 128],
-                       help='Image size (height width)')
-    parser.add_argument('--top_k', type=int, default=3,
-                       help='Number of top predictions to show')
-    
-    return parser.parse_args()
-
-
-def detect_input_type(filepath):
-    """
-    Detect input type based on file extension
-    
-    Args:
-        filepath (str): Path to input file
-        
-    Returns:
-        str: 'audio' or 'image'
-    """
-    audio_extensions = ['.wav', '.mp3', '.flac', '.ogg', '.m4a']
-    image_extensions = ['.png', '.jpg', '.jpeg', '.bmp']
-    
-    ext = os.path.splitext(filepath)[1].lower()
-    
-    if ext in audio_extensions:
-        return 'audio'
-    elif ext in image_extensions:
-        return 'image'
+    if model_type == 'cnn':
+        model = models_pytorch.BatCNN(n_mels=n_mels, n_classes=2)
+    elif model_type == 'transformer':
+        model = models_pytorch.BatTransformer(n_mels=n_mels, n_classes=2)
     else:
-        raise ValueError(f"Unknown file type: {ext}")
+        raise ValueError(f"Unknown model type: {model_type}")
+    
+    # Load weights
+    checkpoint = torch.load(model_path, map_location=device)
+    model.load_state_dict(checkpoint)
+    model = model.to(device)
+    model.eval()
+    
+    return model
 
-
-def load_and_preprocess_image(image_path, img_size):
-    """
-    Load and preprocess image
+def predict_species(audio_path, sample_rate=44100, n_mels=128, duration=3.5):
+    """Predict species from audio file - returns dict with results"""
     
-    Args:
-        image_path (str): Path to image
-        img_size (tuple): Target image size
-        
-    Returns:
-        np.array: Preprocessed image
-    """
-    img = Image.open(image_path).convert('RGB')
-    img = img.resize(img_size)
-    img_array = np.array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    return img_array
-
-
-def load_and_preprocess_audio(audio_path, img_size):
-    """
-    Load audio and convert to spectrogram
+    # Load audio
+    waveform, sr = librosa.load(audio_path, sr=sample_rate)
     
-    Args:
-        audio_path (str): Path to audio file
-        img_size (tuple): Target image size
-        
-    Returns:
-        np.array: Preprocessed spectrogram image
-    """
-    processor = AudioProcessor()
-    img = processor.process_audio_file(audio_path, output_size=img_size)
-    img_array = img / 255.0
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-    
-    return img_array
-
-
-def predict(args):
-    """
-    Main prediction function
-    
-    Args:
-        args: Command line arguments
-    """
-    print("=" * 50)
-    print("Bat Species Classification - Prediction")
-    print("=" * 50)
-    
-    # Check if files exist
-    if not os.path.exists(args.input):
-        raise FileNotFoundError(f"Input file not found: {args.input}")
-    if not os.path.exists(args.model):
-        raise FileNotFoundError(f"Model file not found: {args.model}")
-    if not os.path.exists(args.labels):
-        raise FileNotFoundError(f"Labels file not found: {args.labels}")
-    
-    # Detect input type
-    if args.input_type == 'auto':
-        input_type = detect_input_type(args.input)
-        print(f"\nDetected input type: {input_type}")
+    # Trim/pad to fixed duration
+    target_samples = int(sample_rate * duration)
+    if len(waveform) > target_samples:
+        waveform = waveform[:target_samples]
     else:
-        input_type = args.input_type
+        waveform = np.pad(waveform, (0, target_samples - len(waveform)), mode='constant')
     
-    # Load and preprocess input
-    print(f"\nLoading and preprocessing {input_type}...")
-    img_size = tuple(args.img_size)
+    # Generate mel-spectrogram
+    spectrogram = librosa.feature.melspectrogram(
+        y=waveform,
+        sr=sample_rate,
+        n_mels=n_mels,
+        n_fft=2048,
+        hop_length=512
+    )
+    spectrogram = librosa.power_to_db(spectrogram, ref=np.max)
     
-    if input_type == 'audio':
-        X = load_and_preprocess_audio(args.input, img_size)
-        print(f"Converted audio to spectrogram")
-    else:
-        X = load_and_preprocess_image(args.input, img_size)
+    # Normalize
+    spectrogram = (spectrogram - spectrogram.mean()) / (spectrogram.std() + 1e-9)
     
-    print(f"Input shape: {X.shape}")
+    # Convert to tensor (batch_size=1, channels=1, height=n_mels, width=time)
+    spec_tensor = torch.from_numpy(spectrogram).unsqueeze(0).unsqueeze(0).float().to(device)
     
-    # Load model
-    print(f"\nLoading model from {args.model}...")
-    model = keras.models.load_model(args.model)
+    # Predict - model now only returns species_logits (not count_pred)
+    with torch.no_grad():
+        species_logits = model(spec_tensor)
     
-    # Load labels
-    print(f"Loading labels from {args.labels}...")
-    with open(args.labels, 'r') as f:
-        label_data = json.load(f)
+    # Get prediction
+    species_probs = torch.softmax(species_logits, dim=1)
+    species_id = torch.argmax(species_probs, dim=1).item()
+    confidence = species_probs[0, species_id].item() * 100
     
-    class_names = label_data['class_names']
+    species_names = ["Pip ceylonicus", "Pip tenuis"]
     
-    # Make prediction
-    print("\nMaking prediction...")
-    predictions = model.predict(X, verbose=0)
-    
-    # Get top predictions
-    top_indices = np.argsort(predictions[0])[-args.top_k:][::-1]
-    top_probs = predictions[0][top_indices]
-    
-    print("\n" + "=" * 50)
-    print("Prediction Results:")
-    print("=" * 50)
-    
-    for i, (idx, prob) in enumerate(zip(top_indices, top_probs), 1):
-        species = class_names[idx]
-        confidence = prob * 100
-        print(f"{i}. {species}: {confidence:.2f}%")
-    
-    # Return results as dictionary
-    results = {
-        'input_file': args.input,
-        'predictions': [
-            {
-                'rank': i,
-                'species': class_names[idx],
-                'confidence': float(prob)
-            }
-            for i, (idx, prob) in enumerate(zip(top_indices, top_probs), 1)
-        ]
+    return {
+        'species': species_names[species_id],
+        'confidence': confidence,
+        'species_id': species_id,
+        'probs': species_probs.cpu().numpy()[0]
     }
-    
-    return results
 
-
-if __name__ == '__main__':
-    args = parse_args()
-    results = predict(args)
