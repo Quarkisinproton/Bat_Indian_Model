@@ -46,23 +46,18 @@ def evaluate(args):
     
     all_preds = []
     all_labels = []
-    all_count_preds = []
-    all_count_targets = []
     
     with torch.no_grad():
         for batch in loader:
             spectrogram = batch['spectrogram'].to(device)
             species_label = batch['species_label'].to(device)
-            call_count = batch['call_count'].to(device).float().unsqueeze(1)
             
-            species_logits, count_pred = model(spectrogram)
+            species_logits = model(spectrogram)
             
             preds = torch.argmax(species_logits, dim=1)
             
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(species_label.cpu().numpy())
-            all_count_preds.extend(count_pred.cpu().numpy())
-            all_count_targets.extend(call_count.cpu().numpy())
             
     # Metrics
     print("\nClassification Report:")
@@ -70,9 +65,6 @@ def evaluate(args):
     
     print("\nConfusion Matrix:")
     print(confusion_matrix(all_labels, all_preds))
-    
-    mae = np.mean(np.abs(np.array(all_count_preds) - np.array(all_count_targets)))
-    print(f"\nCount MAE: {mae:.4f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Bat Species Model")
