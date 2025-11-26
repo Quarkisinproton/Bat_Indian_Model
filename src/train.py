@@ -61,10 +61,7 @@ def train(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # Training Loop
-    best_val_loss = float('inf')
     best_val_acc = 0.0
-    patience = 20  # Early stopping: stop if no improvement for 20 epochs
-    epochs_without_improvement = 0
     
     for epoch in range(args.epochs):
         model.train()
@@ -122,15 +119,6 @@ def train(args):
             best_val_acc = val_species_acc
             torch.save(model.state_dict(), f"best_model_{args.model}.pth")
             print(f"Saved best model (Val Acc: {val_species_acc:.2f})")
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-        
-        # Early stopping: prevent overfitting
-        if epochs_without_improvement >= patience:
-            print(f"\nEarly stopping: No improvement for {patience} epochs")
-            print(f"Best validation accuracy: {best_val_acc:.2f}")
-            break
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Bat Species Model")
