@@ -123,27 +123,61 @@ class BatDataset(Dataset):
 
     def _apply_augmentation(self, waveform):
         """
-        Apply lightweight random augmentations to waveform (memory-efficient):
-        - Add noise: small Gaussian noise
-        - Volume change: ±10% volume
+        Apply multiple lightweight random augmentations to waveform (memory-efficient):
+        - Add Gaussian noise: realistic sensor noise
+        - Add background noise: simulate ambient sounds
+        - Volume/amplitude scaling: 0.7x to 1.3x (more aggressive)
+        - Clipping distortion: frequency content variation
+        - Bit depth reduction: simulate lower quality recordings
         
-        Note: Expensive augmentations (pitch shift, time stretch) are skipped
-        to avoid OOM errors on limited GPU memory.
+        All operations are element-wise or simple operations - no expensive
+        resampling or FFT-based pitch shifting that causes OOM.
         """
         if not self.augment:
             return waveform
         
-        # Only apply lightweight augmentations (no pitch shift or resample)
-        if np.random.rand() > 0.5:
-            # Add Gaussian noise
-            noise_level = np.random.uniform(0.0005, 0.005)
-            noise = torch.randn_like(waveform) * noise_level
-            waveform = waveform + noise
+        # Randomly apply 2-4 augmentations per sample
+        num_augmentations = np.random.randint(2, 5)
+        augmentations = np.random.choice(
+            ['gaussian_noise', 'pink_noise', 'volume', 'clipping', 'quantize'],
+            size=min(num_augmentations, 5),
+            replace=False
+        )
         
-        if np.random.rand() > 0.5:
-            # Random volume change: 0.9x to 1.1x (reduced from 0.8-1.2)
-            volume_scale = np.random.uniform(0.9, 1.1)
-            waveform = waveform * volume_scale
+        for aug in augmentations:
+            if aug == 'gaussian_noise':
+                # Add Gaussian noise (most common)
+                noise_level = np.random.uniform(0.001, 0.015)
+                noise = torch.randn_like(waveform) * noise_level
+                waveform = waveform + noise
+            
+            elif aug == 'pink_noise':
+                # Add pink noise (1/f noise - more realistic)
+                noise_level = np.random.uniform(0.0005, 0.01)
+                pink_noise = torch.randn(waveform.shape[0], device=waveform.device)
+                # Simple pink noise simulation: cumsum + normalize
+                pink_noise = torch.cumsum(pink_noise, dim=0)
+                pink_noise = pink_noise / pink_noise.abs().max()
+                waveform = waveform + pink_noise * noise_level
+            
+            elif aug == 'volume':
+                # Aggressive volume scaling: 0.7x to 1.3x
+                volume_scale = np.random.uniform(0.7, 1.3)
+                waveform = waveform * volume_scale
+            
+            elif aug == 'clipping':
+                # Soft clipping distortion (adds harmonics)
+                clip_threshold = np.random.uniform(0.5, 0.95)
+                waveform = torch.tanh(waveform / clip_threshold) * clip_threshold
+            
+            elif aug == 'quantize':
+                # Bit depth reduction (simulate lossy codec)
+                num_bits = np.random.randint(8, 15)  # 8-14 bits
+                max_val = (2 ** (num_bits - 1)) - 1
+                waveform = torch.round(waveform * max_val) / max_val
+        
+        # Clip to prevent explosion
+        waveform = torch.clamp(waveform, -1.0, 1.0)
         
         return waveform
 
