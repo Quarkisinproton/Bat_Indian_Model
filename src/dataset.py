@@ -147,15 +147,13 @@ class BatDataset(Dataset):
                     pass  # Skip if pitch shift fails
             
             elif aug == 'stretch' and np.random.rand() > 0.5:
-                # Random time stretch: 0.9x to 1.1x (resample to simulate speed change)
-                rate = np.random.uniform(0.9, 1.1)
-                # Use resample with adjusted sample rate to simulate time stretch
+                # Random time stretch: 0.95x to 1.05x (reduce range to avoid memory issues)
+                rate = np.random.uniform(0.95, 1.05)
                 new_sr = int(self.target_sample_rate * rate)
                 try:
-                    waveform = F.resample(waveform, self.target_sample_rate, new_sr)
-                    # Resample back to original rate
-                    waveform = F.resample(waveform, new_sr, self.target_sample_rate)
-                except:
+                    waveform_resampled = F.resample(waveform, self.target_sample_rate, new_sr)
+                    waveform = F.resample(waveform_resampled, new_sr, self.target_sample_rate)
+                except Exception as e:
                     pass  # Skip if resample fails
             
             elif aug == 'noise' and np.random.rand() > 0.5:
