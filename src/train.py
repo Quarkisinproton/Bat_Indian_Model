@@ -27,7 +27,8 @@ def train(args):
         data_dir=args.data_dir,
         target_sample_rate=args.sample_rate,
         n_mels=args.n_mels,
-        fixed_duration=args.duration
+        fixed_duration=args.duration,
+        augment=args.augment
     )
     
     # Split dataset
@@ -139,6 +140,7 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=float, default=5.0, help="Fixed duration in seconds")
     parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio")
     parser.add_argument("--count_weight", type=float, default=1.0, help="Weight for count loss")
+    parser.add_argument("--augment", type=bool, default=False, help="Enable data augmentation (pitch, stretch, noise, volume)")
     
     args = parser.parse_args()
     train(args)
