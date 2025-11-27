@@ -56,9 +56,12 @@ def train(args):
     else:
         raise ValueError(f"Unknown model: {args.model}")
         
-    # Loss and Optimizer - use weighted loss for class imbalance
-    criterion_species = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    # Loss and Optimizer - use weighted loss + label smoothing to prevent overconfidence
+    criterion_species = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    
+    # Learning rate scheduler - reduce LR when stuck
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10, verbose=True)
     
     # Training Loop
     best_val_acc = 0.0
@@ -113,6 +116,9 @@ def train(args):
         print(f"Epoch {epoch+1}/{args.epochs} | "
               f"Train Loss: {train_loss:.4f} Acc: {train_species_acc:.2f} | "
               f"Val Loss: {val_loss:.4f} Acc: {val_species_acc:.2f}")
+        
+        # Learning rate scheduler step
+        scheduler.step(val_species_acc)
         
         # Save model based on validation ACCURACY (more stable than loss for small datasets)
         if val_species_acc > best_val_acc:
