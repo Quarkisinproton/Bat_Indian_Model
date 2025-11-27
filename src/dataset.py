@@ -211,12 +211,77 @@ class BatDataset(Dataset):
             elif current_len > target_len:
                 waveform = waveform[:, :target_len]
         
-        # Generate Spectrogram
-        spec = self.mel_spectrogram(waveform)
-        spec = self.amplitude_to_db(spec)
+        # Generate MULTIPLE acoustic features for better discrimination
+        
+        # 1. Mel-spectrogram (original)
+        mel_spec = self.mel_spectrogram(waveform)
+        mel_spec_db = self.amplitude_to_db(mel_spec)
+        
+        # 2. MFCC (Mel-frequency cepstral coefficients) - captures timbre
+        mfcc = torchaudio.transforms.MFCC(
+            sample_rate=self.target_sample_rate,
+            n_mfcc=40,
+            melkwargs={'n_fft': 2048, 'hop_length': 512, 'n_mels': self.n_mels}
+        )(waveform)
+        
+        # 3. Spectral features using librosa (on first channel)
+        import librosa
+        waveform_np = waveform[0].numpy()
+        
+        # Spectral centroid (brightness)
+        spectral_centroid = librosa.feature.spectral_centroid(
+            y=waveform_np, sr=self.target_sample_rate, n_fft=2048, hop_length=512
+        )
+        
+        # Spectral bandwidth (spread of frequencies)
+        spectral_bandwidth = librosa.feature.spectral_bandwidth(
+            y=waveform_np, sr=self.target_sample_rate, n_fft=2048, hop_length=512
+        )
+        
+        # Zero-crossing rate (noisiness)
+        zero_crossing_rate = librosa.feature.zero_crossing_rate(
+            y=waveform_np, frame_length=2048, hop_length=512
+        )
+        
+        # Convert to tensors and match time dimension
+        spectral_centroid = torch.from_numpy(spectral_centroid).float()
+        spectral_bandwidth = torch.from_numpy(spectral_bandwidth).float()
+        zero_crossing_rate = torch.from_numpy(zero_crossing_rate).float()
+        
+        # Pad/crop spectral features to match mel-spectrogram time dimension
+        target_time = mel_spec_db.shape[-1]
+        
+        def pad_or_crop(tensor, target_len):
+            if tensor.shape[-1] < target_len:
+                padding = target_len - tensor.shape[-1]
+                tensor = torch.nn.functional.pad(tensor, (0, padding))
+            elif tensor.shape[-1] > target_len:
+                tensor = tensor[..., :target_len]
+            return tensor
+        
+        spectral_centroid = pad_or_crop(spectral_centroid, target_time)
+        spectral_bandwidth = pad_or_crop(spectral_bandwidth, target_time)
+        zero_crossing_rate = pad_or_crop(zero_crossing_rate, target_time)
+        
+        # Stack all features: [mel_spec, mfcc, spectral_centroid, bandwidth, zcr]
+        # Normalize each feature independently
+        def normalize(x):
+            return (x - x.mean()) / (x.std() + 1e-9)
+        
+        mel_spec_norm = normalize(mel_spec_db)
+        mfcc_norm = normalize(mfcc)
+        
+        # Combine features by stacking along frequency dimension
+        combined_features = torch.cat([
+            mel_spec_norm,
+            mfcc_norm,
+            spectral_centroid.unsqueeze(0),
+            spectral_bandwidth.unsqueeze(0),
+            zero_crossing_rate.unsqueeze(0)
+        ], dim=1)  # Stack along frequency/feature dimension
         
         return {
-            'spectrogram': spec,
+            'spectrogram': combined_features,  # Now contains all features
             'species_label': torch.tensor(sample['species_id'], dtype=torch.long),
             'call_count': torch.tensor(sample['call_count'], dtype=torch.float),
             'path': sample['path']

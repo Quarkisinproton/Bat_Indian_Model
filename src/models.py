@@ -33,7 +33,8 @@ class BatCNN(nn.Module):
         self.species_head = nn.Linear(128, n_classes)
 
     def forward(self, x):
-        # x: (Batch, 1, n_mels, time)
+        # x: (Batch, 1, features, time)
+        # features = mel_spec (128) + mfcc (40) + spectral_centroid (1) + bandwidth (1) + zcr (1) = 171
         x = self.features(x)
         x = self.flatten(x)
         x = self.relu(self.fc_shared(x))
